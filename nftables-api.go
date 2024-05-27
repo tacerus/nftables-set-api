@@ -31,10 +31,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 
-  "github.com/google/nftables"
+	"github.com/google/nftables"
 	"github.com/gorilla/mux"
 	"github.com/palner/pgrtools/pgparse"
 )
@@ -69,42 +68,8 @@ func main() {
 	http.ListenAndServe(listen, router)
 }
 
-// Function to see if string within string
-func contains(list []string, value string) bool {
-	for _, val := range list {
-		if val == value {
-			return true
-		}
-	}
-	return false
-}
-
-func checkIPAddress(ip string) bool {
-	if net.ParseIP(ip) == nil {
-		return false
-	} else {
-		return true
-	}
-}
-
-func checkIPAddressv4(ip string) (string, error) {
-	if net.ParseIP(ip) == nil {
-		return "", errors.New("Not an IP address")
-	}
-	for i := 0; i < len(ip); i++ {
-		switch ip[i] {
-		case '.':
-			return "ipv4", nil
-		case ':':
-			return "ipv6", nil
-		}
-	}
-
-	return "", errors.New("unknown error")
-}
-
-func initializeNFTables(nft *nftables.Conn, targetSetF string) (*nftables.Set, error) {
-  foundTables, err := nft.ListTables()
+func nftablesGetSet(nft *nftables.Conn, targetSetF string) (*nftables.Set, error) {
+	foundTables, err := nft.ListTables()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read nftables: %w", err)
 	}
@@ -124,8 +89,8 @@ func initializeNFTables(nft *nftables.Conn, targetSetF string) (*nftables.Set, e
 		return nil, fmt.Errorf("table %w does not exist", targetTable)
 	}
 
-  foundSet, err := nft.GetSetByName(table, targetSetF)
-  if err != nil {
+	foundSet, err := nft.GetSetByName(table, targetSetF)
+	if err != nil {
 		return nil, fmt.Errorf("could not find set %w: %w", targetSetF, err)
 	}
 
@@ -153,35 +118,22 @@ func initializeNFTables(nft *nftables.Conn, targetSetF string) (*nftables.Set, e
 
 }
 
-func nftableHandle(task string, ipvar string) (string, error) {
-	log.Println("nftableHandle:", task, ipvar)
+func nftablesHandle(task string, ipvar string) (string, error) {
+	log.Println("nftablesHandle:", task, ipvar)
 
 	// Go connect for nftables
 	nft, err := nftables.New()
 	if err != nil {
-		log.Println("nftableHandle:", err)
+		log.Println("nftablesHandle:", err)
 		return "", err
 	}
 
-	ipvarparsed := net.ParseIP(ipvar)
-	var setname string
-	var address net.IP
-	family, err := checkIPAddressv4(ipvar)
-	if err == nil {
-		if family == "ipv4" {
-			setname = targetSet + "4"
-			address = ipvarparsed.To4()
-		} else if family == "ipv6" {
-			setname = targetSet + "6"
-			address = ipvarparsed.To16()
-		}
-	} else {
-		log.Println("address parsing failed:", err)
-	}
+	address, addressFamily := ParseIPAddress(ipvar)
+	setname := AddressFamilyToSetName(targetSet, addressFamily)
 
-	set, err := initializeNFTables(nft, setname)
+	set, err := nftablesGetSet(nft, setname)
 	if err != nil {
-		log.Fatalln("nftableHandler: failed to initialize NFTables:", err)
+		log.Fatalln("nftablesHandler: failed to initialize NFTables:", err)
 		return "", err
 	}
 
@@ -194,18 +146,18 @@ func nftableHandle(task string, ipvar string) (string, error) {
 	switch task {
 
 		case "add":
-			log.Println("nftableHandler: adding address")
+			log.Println("nftablesHandler: adding address")
 			err = nft.SetAddElements(set, element)
 			if err != nil {
-				log.Println("nftableHandler: error adding address: %w", err)
+				log.Println("nftablesHandler: error adding address: %w", err)
 				return "", err
 			}
 
 		case "delete":
-			log.Println("nftableHandler: deleting address")
+			log.Println("nftablesHandler: deleting address")
 			err = nft.SetDeleteElements(set, element)
 			if err != nil {
-				log.Println("nftableHandler: error removing address: %w", err)
+				log.Println("nftablesHandler: error removing address: %w", err)
 				return "", err
 			}
 
@@ -242,7 +194,7 @@ func nftableHandle(task string, ipvar string) (string, error) {
 
 	ferr := nft.Flush()
 	if ferr != nil {
-		log.Println("nftableHandler: failed to save changes: %w", ferr)
+		log.Println("nftablesHandler: failed to save changes: %w", ferr)
 		return "", ferr
 	}
 	return "saved", nil
@@ -255,7 +207,7 @@ func pushIPAddress(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	log.Println("processing pushIPAddress", params["ipaddress"])
 
-	ipType, err := checkIPAddressv4(params["ipaddress"])
+	ipType, err := GetIPAddressFamily(params["ipaddress"])
 	if err != nil {
 		log.Println(params["ipaddress"], "is not a valid ip address")
 		http.Error(w, "{\"error\":\"only valid ip addresses supported\"}", http.StatusBadRequest)
@@ -276,14 +228,14 @@ func addIPAddress(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	log.Println("processing addIPAddress", params["ipaddress"])
 
-	_, err := checkIPAddressv4(params["ipaddress"])
+	_, err := GetIPAddressFamily(params["ipaddress"])
 	if err != nil {
 		log.Println(params["ipaddress"], "is not a valid ip address")
 		http.Error(w, "{\"error\":\"only valid ip addresses supported\"}", http.StatusBadRequest)
 		return
 	}
 
-	status, err := nftableHandle("add", params["ipaddress"])
+	status, err := nftablesHandle("add", params["ipaddress"])
 	if err != nil {
 		http.Error(w, "{\"error\":\""+err.Error()+"\"}", http.StatusBadRequest)
 	} else {
@@ -296,14 +248,14 @@ func removeIPAddress(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	log.Println("processing removeIPAddress", params["ipaddress"])
 
-	_, err := checkIPAddressv4(params["ipaddress"])
+	_, err := GetIPAddressFamily(params["ipaddress"])
 	if err != nil {
 		log.Println(params["ipaddress"], "is not a valid ip address")
 		http.Error(w, "{\"error\":\"only valid ip addresses supported\"}", http.StatusBadRequest)
 		return
 	}
 
-	status, err := nftableHandle("delete", params["ipaddress"])
+	status, err := nftablesHandle("delete", params["ipaddress"])
 	if err != nil {
 		http.Error(w, "{\"error\":\""+err.Error()+"\"}", http.StatusBadRequest)
 	} else {
@@ -316,14 +268,14 @@ func flushSet(w http.ResponseWriter, r *http.Request) {
 	log.Println("processing flushSet")
 	var flushResult string
 
-	_, err := nftableHandle("flush", "")
+	_, err := nftablesHandle("flush", "")
 	if err != nil {
 		flushResult = "ipv4" + err.Error() + ". "
 	} else {
 		flushResult = "ipv4 flushed. "
 	}
 
-	_, err = nftableHandle("flush", "")
+	_, err = nftablesHandle("flush", "")
 	if err != nil {
 		flushResult = flushResult + "ipv6" + err.Error() + ". "
 	} else {
@@ -370,14 +322,14 @@ func rHandleIPAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = checkIPAddressv4(keyVal["ipaddress"])
+	_, err = GetIPAddressFamily(keyVal["ipaddress"])
 	if err != nil {
 		log.Println(keyVal["ipaddress"], "is not a valid ip address")
 		http.Error(w, "{\"error\":\"only valid ip addresses supported\"}", http.StatusBadRequest)
 		return
 	}
 
-	status, err := nftableHandle(handleType, keyVal["ipaddress"])
+	status, err := nftablesHandle(handleType, keyVal["ipaddress"])
 	if err != nil {
 		http.Error(w, "{\"error\":\""+err.Error()+"\"}", http.StatusBadRequest)
 	} else {
