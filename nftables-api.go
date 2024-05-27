@@ -30,33 +30,62 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 
 	"github.com/google/nftables"
 	"github.com/gorilla/mux"
+
+	"gopkg.in/yaml.v3"
 )
 
+var config Config
+
+var configFile string
 var listen string
 var logFile string
 var targetTable string
 
 func init() {
+	flag.StringVar(&configFile, "config", "/etc/nft-set-api.yml", "path to configuration file")
 	flag.StringVar(&targetTable, "table", "mytable", "target table")
 	flag.StringVar(&listen, "listen", "[::1]:8082", "address and port to listen on")
+}
+
+type Config struct {
+	TokenSets map[string][]string
 }
 
 func main() {
 	flag.Parse()
 
 	log.Print("** Starting nftables-API")
+
+	buffer, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		log.Fatalln("Could not read configuration:", err)
+		return
+	}
+
+	err = yaml.Unmarshal(buffer, &config)
+	if err != nil {
+		log.Fatalln("Could not parse configuration:", err)
+		return
+	}
+	//log.Printf("%+v\n", config)
+
 	log.Print("** Choose to be optimistic, it feels better.")
 	log.Print("** Licensed under GPLv2. See LICENSE for details.")
 	log.Print("** Listening on ", listen)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/set/{set}/{value}", handleSetRoute).Methods("DELETE", "POST", "PUT")
+
+	authMiddleware := authMiddlewareMap{make(map[string]string)}
+	router.Use(authMiddleware.Middleware)
+
 	http.ListenAndServe(listen, router)
 }
 
@@ -231,7 +260,38 @@ func nftablesHandle(task string, setprefix string, ipvar string) (string, error)
 		return "", ferr
 	}
 	return status, nil
+}
 
+type authMiddlewareMap struct {
+	tokenSets map[string]string
+}
+
+func (authMiddleware *authMiddlewareMap) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var givenToken = r.Header.Get("X-NFT-API-Token")
+		params := mux.Vars(r)
+		givenSet := params["set"]
+
+		if givenToken == "" {
+			w.WriteHeader(http.StatusForbidden)
+			http.Error(w, "{\"error\":\"missing token\"}", http.StatusBadRequest)
+			return
+		}
+
+		for configToken, configSets := range config.TokenSets {
+			if givenToken == configToken {
+				for _, configSet := range configSets {
+					if givenSet == configSet {
+						log.Println("auth ok")
+						next.ServeHTTP(w, r)
+						return
+					}
+				}
+			}
+		}
+
+		http.Error(w, "{\"error\":\"auth failed\"}", http.StatusForbidden)
+	})
 }
 
 func handleSetRoute(w http.ResponseWriter, r *http.Request) {
