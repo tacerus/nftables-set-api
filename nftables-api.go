@@ -33,8 +33,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"runtime"
 
   "github.com/google/nftables"
 	"github.com/gorilla/mux"
@@ -49,24 +47,11 @@ var targetSet string
 func init() {
 	flag.StringVar(&targetTable, "table", "mytable", "target table")
 	flag.StringVar(&targetSet, "set", "myset", "target set prefix")
-	flag.StringVar(&logFile, "log", "-", "location of log file or - for stdout")
 	flag.StringVar(&listen, "listen", "[::1]:8082", "address and port to listen on")
 }
 
 func main() {
 	flag.Parse()
-
-	if logFile != "-" && logFile != "stdout" {
-		lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Panic(err)
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			runtime.Goexit()
-		}
-		defer lf.Close()
-
-		log.SetOutput(lf)
-	}
 
 	log.Print("** Starting nftables-API")
 	log.Print("** Choose to be optimistic, it feels better.")
