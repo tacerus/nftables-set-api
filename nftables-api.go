@@ -41,7 +41,7 @@ import (
 	"github.com/palner/pgrtools/pgparse"
 )
 
-var APIport string
+var listen string
 var logFile string
 var targetTable string
 var targetSet string
@@ -50,7 +50,7 @@ func init() {
 	flag.StringVar(&targetTable, "table", "mytable", "target table")
 	flag.StringVar(&targetSet, "set", "myset", "target set prefix")
 	flag.StringVar(&logFile, "log", "-", "location of log file or - for stdout")
-	flag.StringVar(&APIport, "port", "8082", "port to listen on")
+	flag.StringVar(&listen, "listen", "[::1]:8082", "address and port to listen on")
 }
 
 func main() {
@@ -71,7 +71,7 @@ func main() {
 	log.Print("** Starting nftables-API")
 	log.Print("** Choose to be optimistic, it feels better.")
 	log.Print("** Licensed under GPLv2. See LICENSE for details.")
-	log.Print("** API will listen on port ", APIport)
+	log.Print("** Listening on ", listen)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/addip/{ipaddress}", addIPAddress).Methods("POST")
@@ -81,7 +81,7 @@ func main() {
 	router.HandleFunc("/removeip/{ipaddress}", removeIPAddress).Methods("POST")
 	router.HandleFunc("/unblockip/{ipaddress}", removeIPAddress).Methods("POST")
 	router.HandleFunc("/", rHandleIPAddress).Methods("DELETE", "POST", "PUT")
-	http.ListenAndServe("[::]:"+APIport, router)
+	http.ListenAndServe(listen, router)
 }
 
 // Function to see if string within string
