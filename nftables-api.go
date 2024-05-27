@@ -25,6 +25,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -115,7 +116,60 @@ func nftablesGetSet(nft *nftables.Conn, targetSetF string) (*nftables.Set, error
 
 	log.Printf("created set %w", targetSetF)
 	return set, nil
+}
 
+func SetContainsElement(nft *nftables.Conn, set *nftables.Set, element []nftables.SetElement) (bool, error) {
+
+	existingElements, err := nft.GetSetElements(set)
+	if err != nil {
+		return false, err
+	}
+
+	for _, existingElement := range existingElements {
+		if bytes.Equal(existingElement.Key, element[0].Key) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func nftablesPutSetElement(nft *nftables.Conn, set *nftables.Set, element []nftables.SetElement) (string, error) {
+
+	contains, err := SetContainsElement(nft, set, element)
+	if err != nil {
+		return "error", err
+	}
+	if contains {
+		log.Println("address already in set")
+		return "already", nil
+	} else {
+		err := nft.SetAddElements(set, element)
+		if err != nil {
+			log.Println("error adding address: %w", err)
+			return "error", err
+		}
+	}
+	return "added", nil
+}
+
+func nftablesDeleteSetElement(nft *nftables.Conn, set *nftables.Set, element []nftables.SetElement) (string, error) {
+
+	contains, err := SetContainsElement(nft, set, element)
+	if err != nil {
+		return "error", err
+	}
+	if contains {
+		log.Println("deleting address from set")
+		err = nft.SetDeleteElements(set, element)
+		if err != nil {
+			log.Println("error removing address: %w", err)
+			return "error", err
+		}
+		return "deleted", nil
+	} else {
+		return "not present", nil
+	}
 }
 
 func nftablesHandle(task string, ipvar string) (string, error) {
@@ -143,23 +197,16 @@ func nftablesHandle(task string, ipvar string) (string, error) {
 		},
 	}
 
+	var status string
 	switch task {
 
 		case "add":
 			log.Println("nftablesHandler: adding address")
-			err = nft.SetAddElements(set, element)
-			if err != nil {
-				log.Println("nftablesHandler: error adding address: %w", err)
-				return "", err
-			}
+			status, err = nftablesPutSetElement(nft, set, element)
 
 		case "delete":
 			log.Println("nftablesHandler: deleting address")
-			err = nft.SetDeleteElements(set, element)
-			if err != nil {
-				log.Println("nftablesHandler: error removing address: %w", err)
-				return "", err
-			}
+			status, err = nftablesDeleteSetElement(nft, set, element)
 
 		case "flush":
 			nft.FlushSet(set)
@@ -192,12 +239,17 @@ func nftablesHandle(task string, ipvar string) (string, error) {
 			return "", errors.New("unknown task")
 		}
 
+	if err != nil {
+		log.Println("nftablesHandler: error in task %w: %w", task, err)
+		return status, err
+	}
+
 	ferr := nft.Flush()
 	if ferr != nil {
 		log.Println("nftablesHandler: failed to save changes: %w", ferr)
 		return "", ferr
 	}
-	return "saved", nil
+	return status, nil
 
 }
 
