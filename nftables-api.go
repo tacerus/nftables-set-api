@@ -119,7 +119,6 @@ func checkIPAddressv4(ip string) (string, error) {
 }
 
 func initializeNFTables(nft *nftables.Conn, targetSetF string) (*nftables.Set, error) {
-	// Get existing chains from nftables
   foundTables, err := nft.ListTables()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read nftables: %w", err)
@@ -208,62 +207,61 @@ func nftableHandle(task string, ipvar string) (string, error) {
 	}
 
 	switch task {
-	case "add":
-		log.Println("nftableHandler: adding address")
-		err = nft.SetAddElements(set, element)
-		if err != nil {
-			log.Println("nftableHandler: error adding address:", err)
-			return "", err
-		} else {
-			err := nft.Flush()
+
+		case "add":
+			log.Println("nftableHandler: adding address")
+			err = nft.SetAddElements(set, element)
 			if err != nil {
-				log.Println("nftableHandler: failed to save changes: %w", err)
+				log.Println("nftableHandler: error adding address: %w", err)
+				return "", err
 			}
-			return "added", nil
-		}
-	case "delete":
-		log.Println("nftableHandler: deleting address")
-		err = nft.SetDeleteElements(set, element)
-		if err != nil {
-			log.Println("nftableHandler: error removing address:", err)
-			return "", err
-		} else {
-			err := nft.Flush()
+
+		case "delete":
+			log.Println("nftableHandler: deleting address")
+			err = nft.SetDeleteElements(set, element)
 			if err != nil {
-				log.Println("nftableHandler: failed to save changes")
+				log.Println("nftableHandler: error removing address: %w", err)
+				return "", err
 			}
-			return "deleted", nil
-		}
-	case "flush":
-		nft.FlushSet(set)
-		return "flushed", nil
-	/*
-	case "push":
-		var exists = false
-		exists, err = ipt.Exists("filter", chainName, "-s", ipvar, "-d", "0/0", "-j", targetChain)
-		if err != nil {
-			log.Println("iptableHandler: error checking if ip already exists", err)
-			return "error checking if ip already exists in the chain", err
-		} else {
-			if exists {
-				err = errors.New("ip already exists")
-				log.Println("iptableHandler: ip already exists", err)
-				return "ip already exists", err
+
+		case "flush":
+			nft.FlushSet(set)
+			return "flushed", nil
+		/*
+		case "push":
+			var exists = false
+			exists, err = ipt.Exists("filter", chainName, "-s", ipvar, "-d", "0/0", "-j", targetChain)
+			if err != nil {
+				log.Println("iptableHandler: error checking if ip already exists", err)
+				return "error checking if ip already exists in the chain", err
 			} else {
-				err = ipt.Insert("filter", chainName, 1, "-s", ipvar, "-d", "0/0", "-j", targetChain)
-				if err != nil {
-					log.Println("iptableHandler: error pushing address", err)
-					return "", err
+				if exists {
+					err = errors.New("ip already exists")
+					log.Println("iptableHandler: ip already exists", err)
+					return "ip already exists", err
 				} else {
-					return "pushed", nil
+					err = ipt.Insert("filter", chainName, 1, "-s", ipvar, "-d", "0/0", "-j", targetChain)
+					if err != nil {
+						log.Println("iptableHandler: error pushing address", err)
+						return "", err
+					} else {
+						return "pushed", nil
+					}
 				}
 			}
+		*/
+		default:
+			log.Println("iptableHandler: unknown task")
+			return "", errors.New("unknown task")
 		}
-	*/
-	default:
-		log.Println("iptableHandler: unknown task")
-		return "", errors.New("unknown task")
+
+	ferr := nft.Flush()
+	if ferr != nil {
+		log.Println("nftableHandler: failed to save changes: %w", ferr)
+		return "", ferr
 	}
+	return "saved", nil
+
 }
 
 /*
