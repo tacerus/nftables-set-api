@@ -54,10 +54,8 @@ func init() {
 }
 
 func main() {
-	// get flags
 	flag.Parse()
 
-	// Open our Log
 	if logFile != "-" && logFile != "stdout" {
 		lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
@@ -139,12 +137,6 @@ func initializeNFTables(nft *nftables.Conn, targetSetF string) (*nftables.Set, e
 	}
 
 	if !exists {
-		/*
-		table := nftables.Table {
-			Name: targetTable,
-			Family: nftables.TableFamilyINet,
-		}
-		*/
 		return nil, fmt.Errorf("table %w does not exist", targetTable)
 	}
 
@@ -175,45 +167,6 @@ func initializeNFTables(nft *nftables.Conn, targetSetF string) (*nftables.Set, e
 	log.Printf("created set %w", targetSetF)
 	return set, nil
 
-
-	// Search for input chain in nftables
-	// chain := "INPUT"
-	// if !contains(chains, chain) {
-	// 	return "error", errors.New("nftables does not contain the expected %w chain", chain)
-	// }
-
-	// Search for FORWARD in nftables
-	// chain = "FORWARD"
-	// if !contains(chains, chain) {
-	// 	return "error", errors.New("iptables does not contain expected %w chain", chain)
-	// }
-
-	// Search for chainName in nftables
-	// if contains(chains, chainName) {
-	// 	return fmt.Sprintf("chain %w already exists", chainName), nil
-	// }
-
-	//log.Printf("nftables doesn't contain %w, creating it now...", chainName)
-
-	// Add chain
-	// err = nft.FlushChain(chainName)
-	// if err != nil {
-	// 	return "error", fmt.Errorf("failed to clear %w chain: %w", chainName, err)
-	// }
-
-	// Add chainName to INPUT
-	// err = nft.Insert("filter", "INPUT", 1, "-j", chainName)
-	// if err != nil {
-	// 	return "error", fmt.Errorf("failed to add chain to INPUT chain: %w", err)
-	// }
-
-	// Add chain to FORWARD
-	// err = ipt.Insert("filter", "FORWARD", 1, "-j", chainName)
-	// if err != nil {
-	// 	return "error", fmt.Errorf("failed to add chain to FORWARD chain: %w", err)
-	// }
-
-	// return fmt.Sprintf("%w created", chainName), nil
 }
 
 func nftableHandle(task string, ipvar string) (string, error) {
@@ -247,13 +200,6 @@ func nftableHandle(task string, ipvar string) (string, error) {
 		log.Fatalln("nftableHandler: failed to initialize NFTables:", err)
 		return "", err
 	}
-
-	/*
-	table := &nftables.Table {
-		Name: "filter",
-		Family: nftables.TableFamilyINet,
-	}
-	*/
 
 	element := []nftables.SetElement {
 		{
@@ -290,14 +236,7 @@ func nftableHandle(task string, ipvar string) (string, error) {
 		}
 	case "flush":
 		nft.FlushSet(set)
-		/*
-		if err != nil {
-			log.Println("nftableHandler: error flushing:", err)
-			return "", err
-		} else {
-		*/
 		return "flushed", nil
-		//}
 	/*
 	case "push":
 		var exists = false
