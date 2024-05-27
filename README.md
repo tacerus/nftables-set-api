@@ -1,3 +1,9 @@
+# nftables-set-api
+
+This repository houses a *highly incomplete* fork of [iptables-api](https://github.com/palner/iptables-api) aiming to manage nftables set elements through a REST API.
+
+Below is the original README.
+
 # iptables-api
 
 Very simple API for managing local iptables chain: `APIBANLOCAL`
